@@ -2,6 +2,7 @@ import express from 'express';
 import http from 'http';
 import {matchRouter} from "./routes/matches.js";
 import {attachWebsocketServer} from "./ws/server.js";
+import {securityMiddleware} from "./ws/arcjet.js";
 
 
 const port = Number(process.env.PORT || 5000);
@@ -12,6 +13,7 @@ const server = http.createServer(app);
 
 app.use(express.json());
 
+app.use(securityMiddleware());
 app.get('/', (req, res) => {
     res.send('Hello from server');
 })
