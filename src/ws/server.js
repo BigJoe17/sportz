@@ -1,7 +1,8 @@
-import { WebSocketServer, WebSocket } from 'ws';
-import { wsArcjet } from './arcjet.js';
+import {WebSocketServer, WebSocket} from 'ws';
+import {wsArcjet} from './arcjet.js';
 
 const matchSubscribers = new Map();
+const MAX_SUBSCRIPTIONS_PER_SOCKET = 200;
 
 /*
   Subscribe a socket to a match
@@ -89,7 +90,7 @@ export function attachWebsocketServer(server) {
         const subscribers = matchSubscribers.get(matchId);
 
         console.log("Broadcasting to match:", matchId);
-        console.log("Subscribers:", subscribers?.size || 0);
+        console.log(`Broadcasting to match ${matchId} → ${subscribers?.size || 0} subscribers`);
 
         if (!subscribers || subscribers.size === 0) return;
 
@@ -138,7 +139,7 @@ export function attachWebsocketServer(server) {
             }
         }
 
-        sendJson(socket, { type: 'welcome' });
+        sendJson(socket, {type: 'welcome'});
 
         /*
           Handle client messages
@@ -155,12 +156,31 @@ export function attachWebsocketServer(server) {
 
             console.log("Client message:", message);
 
-            const matchId = Number(message.matchId);
+            const matchId = Number(message?.matchId);
+            const isValidMatchId = Number.isSafeInteger(matchId);
 
-            /*
-              Subscribe
-            */
-            if (message?.type === 'subscribe' && !Number.isNaN(matchId)) {
+            if ((message?.type === 'subscribe' || message?.type === 'unsubscribe') && !isValidMatchId) {
+                return sendJson(socket, {
+                    type: 'error',
+                    message: 'Invalid matchId'
+                });
+            }
+
+            if (message?.type === 'subscribe') {
+
+                if (socket.subscriptions.size >= MAX_SUBSCRIPTIONS_PER_SOCKET) {
+                    return sendJson(socket, {
+                        type: 'error',
+                        message: 'subscription limit reached'
+                    });
+                }
+
+                if (socket.subscriptions.has(matchId)) {
+                    return sendJson(socket, {
+                        type: 'error',
+                        message: 'already subscribed'
+                    });
+                }
 
                 subscribe(matchId, socket);
                 socket.subscriptions.add(matchId);
@@ -171,10 +191,7 @@ export function attachWebsocketServer(server) {
                 });
             }
 
-            /*
-              Unsubscribe
-            */
-            if (message?.type === 'unsubscribe' && !Number.isNaN(matchId)) {
+            if (message?.type === 'unsubscribe') {
 
                 unsubscribe(matchId, socket);
                 socket.subscriptions.delete(matchId);
@@ -185,6 +202,10 @@ export function attachWebsocketServer(server) {
                 });
             }
 
+            return sendJson(socket, {
+                type: 'error',
+                message: 'Unknown message type'
+            });
         });
 
         socket.on('close', () => cleanupSubscribers(socket));
