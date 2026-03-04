@@ -1,6 +1,6 @@
 import express from 'express';
 import { db } from '../db/db.js';
-import { commentary } from '../db/schema.js';
+import { commentary, matches } from '../db/schema.js';
 
 import { matchIdParamSchema } from '../validation/matches.js';
 import { createCommentarySchema } from '../validation/commentary.js';
@@ -43,6 +43,7 @@ commentaryRouter.get('/', async (req, res) => {
     const limit = Math.min(requestedLimit, MAX_LIMIT);
 
     try {
+
         // 3️⃣ Fetch commentary
         const results = await db
             .select()
@@ -86,8 +87,19 @@ commentaryRouter.post('/', async (req, res) => {
     }
 
     const payload = bodyParsed.data;
- const matchId = paramsParsed.data.id;
+   const matchId = paramsParsed.data.id;
     try {
+
+        const [match] = await db
+            .select({id: matches.id})
+            .from(matches)
+            .where(eq(matches.id, matchId))
+            .limit(1)
+
+        if(!match){
+            return res.status(404).json({error: 'Match not Found'})
+        }
+
         // 3️⃣ Insert into database
         const [result] = await db
             .insert(commentary)
